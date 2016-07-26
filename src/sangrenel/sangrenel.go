@@ -56,11 +56,17 @@ var (
 
 	// Counters / misc.
 	signals        = make(chan os.Signal)
-	killClients = make(chan bool, 24)
-	sentCntr        = make(chan int64, 1)
-	latency         []float64
-	latencies    = make(chan float64, 1)
-	resetLatencies   = make(chan bool, 1)
+	killClients    = make(chan bool, 24)
+	sentCntr       = make(chan int64, 1)
+	latency        []float64
+	latencies      = make(chan float64, 1)
+	resetLatencies = make(chan bool, 1)
+
+	// Certifications
+	certFile  string
+	keyFile   string
+	caFile    string
+	verifySsl bool
 )
 
 func init() {
@@ -73,6 +79,10 @@ func init() {
 	flag.IntVar(&clients, "clients", 1, "Number of Kafka client workers")
 	flag.IntVar(&producers, "producers", 5, "Number of producer instances per client")
 	brokerString := flag.String("brokers", "localhost:9092", "Comma delimited list of Kafka brokers")
+	flag.StringVar(&certFile, "certificate", "", "The optional certificate file for client authentication")
+	flag.StringVar(&keyFile, "key", "", "The optional key file for client authentication")
+	flag.StringVar(&caFile, "ca", "", "The optional certificate authority file for TLS client authentication")
+	flag.BoolVar(&verifySsl, "verify", false, "Optional verify ssl certificates chain")
 	flag.Parse()
 
 	brokers = strings.Split(*brokerString, ",")
@@ -180,7 +190,7 @@ func kafkaClient(n int) {
 	case false:
 		cId := "client_" + strconv.Itoa(n)
 
-		conf := kafka.NewConfig()
+		conf := kafka.NewConfigWithTls(certFile, keyFile, caFile, verifySsl)
 		if compression != kafka.CompressionNone {
 			conf.Producer.Compression = compression
 		}
@@ -325,7 +335,7 @@ func main() {
 			outputBytes, outputString := calcOutput(deltaCnt)
 
 			// Update the metrics map which is also passed to the Graphite writer.
-			metrics["rate"] = float64(deltaCnt/5)
+			metrics["rate"] = float64(deltaCnt / 5)
 			metrics["90th"] = calcLatency() // Well, this technically appends a small latency to the 5s interval.
 			metrics["output"] = outputBytes
 			now := time.Now()
